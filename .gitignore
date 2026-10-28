@@ -1,0 +1,7 @@
+node_modules
+dist
+release
+server/data/*.json
+server/data/*.tmp
+*.log
+.DS_Store
