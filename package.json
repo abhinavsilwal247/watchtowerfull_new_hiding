@@ -1,6 +1,6 @@
 {
   "name": "watchtower",
-  "version": "1.2.2",
+"version": "1.2.3",
   "private": true,
   "type": "module",
   "description": "Windows desktop app that keeps marked taskbar apps out of screenshots",
@@ -19,9 +19,10 @@
     "test": "node --test test/policy.test.js",
     "start": "npm run build && node server/index.js",
     "app": "vite build && electron .",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder --win --publish never",
-    "dist:publish": "npm run build && electron-builder --win --publish always",
+    "prepare:server": "npm install --prefix server --omit=dev",
+    "pack": "npm run build && npm run prepare:server && electron-builder --dir",
+    "dist": "npm run build && npm run prepare:server && electron-builder --win --publish never",
+    "dist:publish": "npm run build && npm run prepare:server && electron-builder --win --publish always",
     "ship": "npm version patch && git push origin main --follow-tags"
   },
   "dependencies": {
