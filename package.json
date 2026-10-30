@@ -109,8 +109,9 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Watchtower",
       "uninstallDisplayName": "Watchtower",
-      "differentialPackage": true
+      "differentialPackage": false
     },
+    "forceCodeSigning": false,
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"
     }
