@@ -24,12 +24,13 @@ permissions:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
     name: Build & publish Windows update
-    runs-on: windows-latest
+    runs-on: windows-2022
+    timeout-minutes: 45
     # Avoid re-entry when the release job pushes a version commit with [skip ci]
     if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
     steps:
@@ -94,10 +95,12 @@ jobs:
 
       - name: Build and publish to GitHub Releases
         if: steps.exists.outputs.skip != 'true'
+        timeout-minutes: 30
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          DEBUG: electron-builder
         run: npm run dist:publish
 
       - name: Commit version + tag on main

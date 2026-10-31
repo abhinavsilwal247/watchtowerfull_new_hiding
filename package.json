@@ -1,6 +1,6 @@
 {
   "name": "watchtower",
-"version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "type": "module",
   "description": "Windows desktop app that keeps marked taskbar apps out of screenshots",
@@ -21,8 +21,8 @@
     "app": "vite build && electron .",
     "prepare:server": "npm install --prefix server --omit=dev",
     "pack": "npm run build && npm run prepare:server && electron-builder --dir",
-    "dist": "npm run build && npm run prepare:server && electron-builder --win --publish never",
-    "dist:publish": "npm run build && npm run prepare:server && electron-builder --win --publish always",
+    "dist": "npm run build && npm run prepare:server && electron-builder --win nsis --x64 --publish never",
+    "dist:publish": "npm run build && npm run prepare:server && electron-builder --win nsis --x64 --publish always",
     "ship": "npm version patch && git push origin main --follow-tags"
   },
   "dependencies": {
@@ -76,6 +76,8 @@
       }
     ],
     "asar": true,
+    "compression": "store",
+    "forceCodeSigning": false,
     "publish": [
       {
         "provider": "github",
@@ -91,16 +93,12 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false,
+      "signDlls": false
     },
     "nsis": {
       "oneClick": false,
@@ -109,11 +107,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Watchtower",
       "uninstallDisplayName": "Watchtower",
-      "differentialPackage": false
-    },
-    "forceCodeSigning": false,
-    "portable": {
-      "artifactName": "${productName}-${version}-portable.${ext}"
+      "differentialPackage": false,
+      "deleteAppDataOnUninstall": false
     }
   }
 }
