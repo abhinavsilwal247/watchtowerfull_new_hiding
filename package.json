@@ -1,6 +1,6 @@
 {
   "name": "watchtower",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "private": true,
   "type": "module",
   "description": "Windows desktop app that keeps marked taskbar apps out of screenshots",
@@ -21,21 +21,21 @@
     "app": "vite build && electron .",
     "prepare:server": "npm install --prefix server --omit=dev",
     "pack": "npm run build && npm run prepare:server && electron-builder --dir",
-    "dist": "npm run build && npm run prepare:server && electron-builder --win nsis --x64 --publish never",
-    "dist:publish": "npm run build && npm run prepare:server && electron-builder --win nsis --x64 --publish always",
+    "dist": "npm run build && npm run prepare:server && electron-builder --win --x64 --publish never",
+    "dist:publish": "npm run build && npm run prepare:server && electron-builder --win --x64 --publish always",
     "ship": "npm version patch && git push origin main --follow-tags"
   },
   "dependencies": {
-    "electron-updater": "^6.8.11",
-    "express": "^4.19.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "concurrently": "^8.2.2",
     "electron": "^35.1.2",
-    "electron-builder": "^25.1.8",
+    "electron-builder": "^26.15.0",
+    "express": "^4.19.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "vite": "^6.4.5"
   },
   "build": {
@@ -77,6 +77,8 @@
     ],
     "asar": true,
     "compression": "store",
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
     "forceCodeSigning": false,
     "publish": [
       {
@@ -89,7 +91,7 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": [
             "x64"
           ]
@@ -98,17 +100,10 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "icon": "build/icon.png",
       "signAndEditExecutable": false,
-      "signDlls": false
+      "verifyUpdateCodeSignature": false
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Watchtower",
-      "uninstallDisplayName": "Watchtower",
-      "differentialPackage": false,
-      "deleteAppDataOnUninstall": false
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
     }
   }
 }

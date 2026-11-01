@@ -30,7 +30,7 @@ jobs:
   publish:
     name: Build & publish Windows update
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 25
     # Avoid re-entry when the release job pushes a version commit with [skip ci]
     if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')
     steps:
@@ -93,15 +93,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish to GitHub Releases
+      # Build first without publishing — avoids electron-builder GitHub publisher hangs.
+      - name: Build Windows portable
         if: steps.exists.outputs.skip != 'true'
-        timeout-minutes: 30
+        timeout-minutes: 15
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist
+
+      - name: Publish GitHub Release
+        if: steps.exists.outputs.skip != 'true'
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-          DEBUG: electron-builder
-        run: npm run dist:publish
+        run: |
+          shopt -s nullglob
+          assets=(release/*.exe release/*.yml release/*.blockmap)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "No release assets found in release/"
+            ls -la release || true
+            exit 1
+          fi
+          gh release create "v${VERSION}" "${assets[@]}" \
+            --title "Watchtower ${VERSION}" \
+            --notes "Watchtower ${VERSION} — download the portable .exe and run it (reinstall needed if a previous build would not open)."
 
       - name: Commit version + tag on main
         if: steps.exists.outputs.skip != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
