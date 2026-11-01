@@ -19,15 +19,21 @@ function log(...args) {
 }
 
 function serverEntry() {
-  return isDev
-    ? path.join(__dirname, '..', 'server', 'index.js')
-    : path.join(process.resourcesPath, 'server', 'index.js');
+  if (isDev) return path.join(__dirname, '..', 'server', 'index.js');
+  const bundled = path.join(process.resourcesPath, 'server', 'server.cjs');
+  const legacy = path.join(process.resourcesPath, 'server', 'index.js');
+  if (fs.existsSync(bundled)) return bundled;
+  return legacy;
 }
 
 function distDir() {
   return isDev
     ? path.join(__dirname, '..', 'dist')
     : path.join(process.resourcesPath, 'dist');
+}
+
+function policyPath() {
+  return path.join(app.getPath('userData'), 'policy.json');
 }
 
 function iconPath() {
@@ -98,6 +104,7 @@ function startServer() {
       ELECTRON_RUN_AS_NODE: '1',
       PORT: String(PORT),
       WATCHTOWER_DIST: distDir(),
+      WATCHTOWER_POLICY: policyPath(),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -116,26 +123,38 @@ ipcMain.on('win:maximize', (event) => {
 });
 ipcMain.on('win:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close());
 
-app.whenReady().then(async () => {
-  try {
-    startServer();
-    await waitForServer();
-    openWindow();
-    updater = setupAutoUpdate();
-  } catch (err) {
-    log('startup failed', err?.stack || err);
-    dialog.showErrorBox(
-      'Watchtower could not start',
-      `${err?.message || err}\n\nLog: ${logFile}\n\nReinstall the latest release, or run the installer again.`,
-    );
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!win) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+
+  app.whenReady().then(async () => {
+    try {
+      startServer();
+      await waitForServer();
+      openWindow();
+      updater = setupAutoUpdate();
+    } catch (err) {
+      log('startup failed', err?.stack || err);
+      dialog.showErrorBox(
+        'Watchtower could not start',
+        `${err?.message || err}\n\nDetails are in:\n${logFile}\n\nClose any old Watchtower process and try again.`,
+      );
+      server?.kill();
+      app.quit();
+    }
+  });
+
+  app.on('window-all-closed', () => {
     server?.kill();
     app.quit();
-  }
-});
+  });
 
-app.on('window-all-closed', () => {
-  server?.kill();
-  app.quit();
-});
-
-app.on('before-quit', () => server?.kill());
+  app.on('before-quit', () => server?.kill());
+}

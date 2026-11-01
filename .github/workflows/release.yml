@@ -94,12 +94,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Build first without publishing — avoids electron-builder GitHub publisher hangs.
-      - name: Build Windows portable
+      - name: Build Windows installer
         if: steps.exists.outputs.skip != 'true'
         timeout-minutes: 15
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist
+
+      - name: Verify packaged server bundle
+        if: steps.exists.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $server = 'release/win-unpacked/resources/server/server.cjs'
+          if (-not (Test-Path $server)) { throw "Missing bundled server at $server" }
+          if (-not (Test-Path 'release/win-unpacked/resources/server/ps/action.ps1')) { throw 'Missing PowerShell helpers' }
+          Write-Host "server bundle ok"
 
       - name: Publish GitHub Release
         if: steps.exists.outputs.skip != 'true'
@@ -116,7 +125,7 @@ jobs:
           fi
           gh release create "v${VERSION}" "${assets[@]}" \
             --title "Watchtower ${VERSION}" \
-            --notes "Watchtower ${VERSION} — download the portable .exe and run it (reinstall needed if a previous build would not open)."
+            --notes "Watchtower ${VERSION} — download Watchtower-${VERSION}-x64.exe, run the installer, then open Watchtower from the Start menu."
 
       - name: Commit version + tag on main
         if: steps.exists.outputs.skip != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'

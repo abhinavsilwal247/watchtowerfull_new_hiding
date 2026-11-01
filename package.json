@@ -1,6 +1,6 @@
 {
   "name": "watchtower",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "private": true,
   "type": "module",
   "description": "Windows desktop app that keeps marked taskbar apps out of screenshots",
@@ -19,7 +19,7 @@
     "test": "node --test test/policy.test.js",
     "start": "npm run build && node server/index.js",
     "app": "vite build && electron .",
-    "prepare:server": "npm install --prefix server --omit=dev",
+    "prepare:server": "node scripts/bundle-server.mjs",
     "pack": "npm run build && npm run prepare:server && electron-builder --dir",
     "dist": "npm run build && npm run prepare:server && electron-builder --win --x64 --publish never",
     "dist:publish": "npm run build && npm run prepare:server && electron-builder --win --x64 --publish always",
@@ -33,6 +33,7 @@
     "concurrently": "^8.2.2",
     "electron": "^35.1.2",
     "electron-builder": "^26.15.0",
+    "esbuild": "^0.25.0",
     "express": "^4.19.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -54,14 +55,8 @@
     ],
     "extraResources": [
       {
-        "from": "server",
-        "to": "server",
-        "filter": [
-          "**/*",
-          "!data/*.json",
-          "!data/*.tmp",
-          "!data/*.mock.json"
-        ]
+        "from": "build/server-pack",
+        "to": "server"
       },
       {
         "from": "dist",
@@ -91,7 +86,7 @@
     "win": {
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
@@ -102,8 +97,16 @@
       "signAndEditExecutable": false,
       "verifyUpdateCodeSignature": false
     },
-    "portable": {
-      "artifactName": "${productName}-${version}-portable.${ext}"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Watchtower",
+      "uninstallDisplayName": "Watchtower",
+      "packElevateHelper": false,
+      "differentialPackage": false,
+      "deleteAppDataOnUninstall": false
     }
   }
 }

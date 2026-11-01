@@ -1,6 +1,6 @@
 /**
  * Silent auto-update via GitHub Releases (electron-updater).
- * Installed NSIS builds check on launch + every 6 hours.
+ * Only for installed NSIS builds — never force-quit the running app.
  */
 const { autoUpdater } = require('electron-updater');
 const { app } = require('electron');
@@ -14,8 +14,11 @@ function log(...args) {
 }
 
 function setupAutoUpdate({ onStatus } = {}) {
-  if (!app.isPackaged) {
-    log('skipped (dev)');
+  // Portable / unpackaged builds should not try to self-update.
+  const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR)
+    || (app.isPackaged && process.execPath.toLowerCase().includes('\\temp\\'));
+  if (!app.isPackaged || isPortable) {
+    log('skipped (dev or portable)');
     return { check: () => {}, isReady: () => false, installNow: () => {} };
   }
 
@@ -40,18 +43,14 @@ function setupAutoUpdate({ onStatus } = {}) {
   });
   autoUpdater.on('update-downloaded', (info) => {
     updateReady = true;
-    notify(`Update ${info.version} ready — installs on Quit`);
-    setTimeout(() => {
-      try { autoUpdater.quitAndInstall(false, true); }
-      catch (e) { log('quitAndInstall deferred', e.message || e); }
-    }, 20_000);
+    notify(`Update ${info.version} ready — installs when you quit Watchtower`);
   });
 
   const check = () => {
     autoUpdater.checkForUpdates().catch((e) => log('check failed', e.message || e));
   };
 
-  setTimeout(check, 8_000);
+  setTimeout(check, 15_000);
   checkTimer = setInterval(check, CHECK_MS);
   if (checkTimer.unref) checkTimer.unref();
 
