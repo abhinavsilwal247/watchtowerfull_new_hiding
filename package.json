@@ -1,6 +1,6 @@
 {
   "name": "watchtower",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "private": true,
   "type": "module",
   "description": "Windows desktop app that keeps marked taskbar apps out of screenshots",
@@ -19,10 +19,11 @@
     "test": "node --test test/policy.test.js",
     "start": "npm run build && node server/index.js",
     "app": "vite build && electron .",
+    "prepare:icons": "node scripts/make-icon.mjs",
     "prepare:server": "node scripts/bundle-server.mjs",
-    "pack": "npm run build && npm run prepare:server && electron-builder --dir",
-    "dist": "npm run build && npm run prepare:server && electron-builder --win --x64 --publish never",
-    "dist:publish": "npm run build && npm run prepare:server && electron-builder --win --x64 --publish always",
+    "pack": "npm run build && npm run prepare:icons && npm run prepare:server && electron-builder --dir",
+    "dist": "npm run build && npm run prepare:icons && npm run prepare:server && electron-builder --win --x64 --publish never",
+    "dist:publish": "npm run build && npm run prepare:icons && npm run prepare:server && electron-builder --win --x64 --publish always",
     "ship": "npm version patch && git push origin main --follow-tags"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "electron-builder": "^26.15.0",
     "esbuild": "^0.28.2",
     "express": "^4.19.2",
+    "png-to-ico": "^3.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^6.4.5"
@@ -66,7 +68,8 @@
         "from": "build",
         "to": "build",
         "filter": [
-          "icon.png"
+          "icon.png",
+          "icon.ico"
         ]
       }
     ],
@@ -93,8 +96,9 @@
         }
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "icon": "build/icon.png",
-      "signAndEditExecutable": false,
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true,
+      "signExecutable": false,
       "verifyUpdateCodeSignature": false
     },
     "nsis": {

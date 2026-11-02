@@ -40,13 +40,18 @@ function policyPath() {
 }
 
 function iconPath() {
-  const packaged = path.join(process.resourcesPath, 'build', 'icon.png');
-  const dev = path.join(__dirname, '..', 'build', 'icon.png');
-  const electronIcon = path.join(__dirname, 'icon.png');
-  if (!isDev && fs.existsSync(packaged)) return packaged;
-  if (fs.existsSync(dev)) return dev;
-  if (fs.existsSync(electronIcon)) return electronIcon;
-  return undefined;
+  const candidates = isDev
+    ? [
+      path.join(__dirname, '..', 'build', 'icon.ico'),
+      path.join(__dirname, '..', 'build', 'icon.png'),
+      path.join(__dirname, 'icon.png'),
+    ]
+    : [
+      path.join(process.resourcesPath, 'build', 'icon.ico'),
+      path.join(process.resourcesPath, 'build', 'icon.png'),
+      path.join(__dirname, 'icon.png'),
+    ];
+  return candidates.find((p) => fs.existsSync(p));
 }
 
 function canListen(p) {
@@ -191,6 +196,11 @@ ipcMain.on('win:maximize', (event) => {
   else w.maximize();
 });
 ipcMain.on('win:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close());
+
+// Matches electron-builder appId so taskbar / Start Menu use our icon identity.
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.watchtower.hiding');
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
