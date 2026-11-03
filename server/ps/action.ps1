@@ -1,16 +1,40 @@
-# Usage: action.ps1 -Op focus|topmost|untopmost|minimize|nocapture|release -Hwnd <long>
+# Usage: action.ps1 -Op focus|topmost|untopmost|minimize|nocapture|release|hidetab|showtab|decoy -Hwnd <long>
 #        action.ps1 -Op … -Hwnds "123,456"
 # nocapture = exclude window from capture (screenshots show what is behind it — not a black box)
 # release   = clear capture exclusion; leave Z-order alone
+# hidetab   = remove window from the taskbar (ITaskbarList::DeleteTab) — still usable
+# showtab   = restore window on the taskbar
+# decoy     = paint that window's taskbar button as active WITHOUT stealing real focus
 param([string]$Op, [long]$Hwnd, [string]$Hwnds)
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 
+[ComImport, Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ITaskbarList {
+  void HrInit();
+  void AddTab(IntPtr hwnd);
+  void DeleteTab(IntPtr hwnd);
+  void ActivateTab(IntPtr hwnd);
+  void SetActiveAlt(IntPtr hwnd);
+}
+
+[ComImport, Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+class CTaskbarList {}
+
 public static class A {
   public const uint WDA_NONE = 0;
   public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
   public const uint SWP_Quiet = 0x13; // NOMOVE|NOSIZE|NOACTIVATE
+  static ITaskbarList _tbl;
+  static ITaskbarList Tbl() {
+    if (_tbl == null) {
+      _tbl = (ITaskbarList)new CTaskbarList();
+      _tbl.HrInit();
+    }
+    return _tbl;
+  }
 
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
@@ -20,6 +44,7 @@ public static class A {
   [DllImport("user32.dll")] public static extern bool SetWindowDisplayAffinity(IntPtr h, uint a);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte sc, uint fl, UIntPtr ex);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string cls, string name);
 
   [DllImport("kernel32.dll", SetLastError=true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
   [DllImport("kernel32.dll", SetLastError=true)] static extern bool CloseHandle(IntPtr h);
@@ -97,6 +122,26 @@ public static class A {
     SetWindowPos(h, new IntPtr(-2), 0, 0, 0, 0, SWP_Quiet);
   }
 
+  public static void HideTab(IntPtr h) {
+    try { Tbl().DeleteTab(h); } catch { }
+  }
+
+  public static void ShowTab(IntPtr h) {
+    try { Tbl().AddTab(h); } catch { }
+  }
+
+  // Mark taskbar button active without changing the real foreground window.
+  public static void DecoyActivate(IntPtr h) {
+    try { Tbl().ActivateTab(h); } catch { }
+  }
+
+  // Soften taskbar in screenshots: exclude the main tray from capture when needed.
+  public static void TrayNoCapture(bool on) {
+    IntPtr tray = FindWindow("Shell_TrayWnd", null);
+    if (tray == IntPtr.Zero) return;
+    if (on) HideFromCapture(tray); else ClearCapture(tray);
+  }
+
   public static void Pin(IntPtr h) {
     if (IsIconic(h)) ShowWindow(h, 9);
     SetWindowPos(h, new IntPtr(-1), 0, 0, 0, 0, 0x53);
@@ -118,12 +163,17 @@ function Invoke-Op([string]$op, [IntPtr]$h) {
     'exclude'   { [A]::NoCapture($h) }
     'raise'     { [A]::NoCapture($h) }
     'release'   { [A]::ClearCapture($h) }
+    'hidetab'   { [A]::HideTab($h) }
+    'showtab'   { [A]::ShowTab($h) }
+    'decoy'     { [A]::DecoyActivate($h) }
+    'trayhide'  { [A]::TrayNoCapture($true) }
+    'trayshow'  { [A]::TrayNoCapture($false) }
     default     { throw "unknown op: $op" }
   }
 }
 if ($Hwnds) {
-  if ($Op -notin @('minimize', 'topmost', 'untopmost', 'nocapture', 'exclude', 'raise', 'release')) {
-    throw 'Hwnds is only supported for minimize|topmost|untopmost|nocapture|exclude|raise|release'
+  if ($Op -notin @('minimize', 'topmost', 'untopmost', 'nocapture', 'exclude', 'raise', 'release', 'hidetab', 'showtab', 'decoy')) {
+    throw 'Hwnds is only supported for minimize|topmost|untopmost|nocapture|exclude|raise|release|hidetab|showtab|decoy'
   }
   foreach ($x in ($Hwnds -split ',')) {
     $n = 0L

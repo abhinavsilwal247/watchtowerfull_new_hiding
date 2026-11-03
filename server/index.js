@@ -36,6 +36,9 @@ const lastShield = new Map();  // hwnd -> ms
 const pinnedByGuard = new Set(); // hwnds we asked Windows to exclude from capture
 const skipCapture = new Set();   // hwnds where capture-hide failed — don't spam
 const captureNote = new Set();
+const hiddenTaskbar = new Set(); // confidential hwnds removed from the taskbar while shielded
+let lastDecoyHwnd = 0;
+let lastDecoyAt = 0;
 const lastKill = new Map();    // pid  -> ms
 
 const SAFE_EXE = /^[\w.\- ]{1,100}\.exe$/i;
@@ -80,7 +83,40 @@ function enforce() {
       ? state.windows.filter((w) => w.confidential && (pinnedByGuard.has(w.hwnd) || captureHidden(w.affinity))).length
       : 0,
     noCapture, captureRefused,
+    taskbarDecoy: state.guard?.taskbarDecoy || null,
   };
+
+  // Taskbar freeze: drop confidential apps from the taskbar and paint the topmost
+  // non-confidential app as "active" — without stealing keyboard focus from private apps.
+  if (ev.shieldOn) {
+    const wantHidden = new Set(ev.hideFromTaskbar.map(Number));
+    const toHide = [...wantHidden].filter((h) => !hiddenTaskbar.has(h));
+    const toShow = [...hiddenTaskbar].filter((h) => !wantHidden.has(h));
+    if (toHide.length) {
+      for (const h of toHide) hiddenTaskbar.add(h);
+      runAction('hidetab', toHide).catch((e) => console.error('[taskbar]', e.message));
+    }
+    if (toShow.length) {
+      for (const h of toShow) hiddenTaskbar.delete(h);
+      runAction('showtab', toShow).catch((e) => console.error('[taskbar]', e.message));
+    }
+    const decoy = ev.taskbarDecoy?.hwnd ? Number(ev.taskbarDecoy.hwnd) : 0;
+    if (decoy && (decoy !== lastDecoyHwnd || now - lastDecoyAt > 1500)) {
+      lastDecoyHwnd = decoy;
+      lastDecoyAt = now;
+      runAction('decoy', decoy).catch((e) => console.error('[taskbar]', e.message));
+    }
+    state.guard.taskbarDecoy = ev.taskbarDecoy
+      ? { hwnd: ev.taskbarDecoy.hwnd, proc: ev.taskbarDecoy.proc, title: ev.taskbarDecoy.title }
+      : null;
+  } else if (hiddenTaskbar.size || lastDecoyHwnd) {
+    const restoreTabs = [...hiddenTaskbar];
+    hiddenTaskbar.clear();
+    lastDecoyHwnd = 0;
+    lastDecoyAt = 0;
+    state.guard.taskbarDecoy = null;
+    if (restoreTabs.length) runAction('showtab', restoreTabs).catch(() => {});
+  }
 
   // See-through only — screenshots show what is behind the private window, never a black box.
   if (!ev.shieldOn && pinnedByGuard.size) {
@@ -114,6 +150,9 @@ function enforce() {
   }
   for (const h of [...pinnedByGuard]) {
     if (!live.has(String(h))) { pinnedByGuard.delete(h); skipCapture.delete(h); captureNote.delete(h); }
+  }
+  for (const h of [...hiddenTaskbar]) {
+    if (!live.has(String(h))) hiddenTaskbar.delete(h);
   }
   // Drop pin when the app is no longer confidential
   for (const h of [...pinnedByGuard]) {
