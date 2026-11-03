@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 const http = require('http');
 const net = require('net');
@@ -11,8 +11,10 @@ const PORT_MAX = 5100;
 const isDev = !app.isPackaged;
 let server;
 let win;
+let tray;
 let updater;
 let port = PORT_MIN;
+let isQuitting = false;
 const logFile = path.join(app.getPath('userData'), 'watchtower.log');
 
 function log(...args) {
@@ -52,6 +54,15 @@ function iconPath() {
       path.join(__dirname, 'icon.png'),
     ];
   return candidates.find((p) => fs.existsSync(p));
+}
+
+function trayImage() {
+  const file = iconPath();
+  if (!file) return nativeImage.createEmpty();
+  const img = nativeImage.createFromPath(file);
+  if (img.isEmpty()) return img;
+  // Windows tray icons are small; keep crisp sizes.
+  return img.resize({ width: 16, height: 16 });
 }
 
 function canListen(p) {
@@ -101,7 +112,6 @@ function killPortHolders() {
 }
 
 async function resolvePort() {
-  // Honor an explicit PORT only if it falls inside the Watchtower range.
   const forced = Number(process.env.PORT);
   if (Number.isInteger(forced) && forced >= PORT_MIN && forced <= PORT_MAX && await canListen(forced)) {
     return forced;
@@ -137,6 +147,55 @@ function waitForServer(activePort) {
   });
 }
 
+function protectOwnWindow() {
+  if (!win || win.isDestroyed()) return;
+  try {
+    // Windows: SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) — screenshots show through us.
+    win.setContentProtection(true);
+  } catch (err) {
+    log('setContentProtection failed', err?.message || err);
+  }
+}
+
+function showWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  protectOwnWindow();
+}
+
+function hideToTray() {
+  if (!win || win.isDestroyed()) return;
+  win.hide();
+}
+
+function createTray() {
+  if (tray) return;
+  tray = new Tray(trayImage());
+  tray.setToolTip('Watchtower');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: 'Open Watchtower',
+      click: () => showWindow(),
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Watchtower',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]));
+  tray.on('click', () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isVisible()) hideToTray();
+    else showWindow();
+  });
+  tray.on('double-click', () => showWindow());
+}
+
 function openWindow(activePort) {
   win = new BrowserWindow({
     width: 400,
@@ -149,6 +208,7 @@ function openWindow(activePort) {
     icon: iconPath(),
     autoHideMenuBar: true,
     show: false,
+    skipTaskbar: true, // live in the notification tray, not the taskbar
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -157,10 +217,29 @@ function openWindow(activePort) {
     },
   });
   win.removeMenu();
-  const sendMax = () => win.webContents.send('win:maximized', win.isMaximized());
+  protectOwnWindow();
+
+  const sendMax = () => {
+    if (!win || win.isDestroyed()) return;
+    win.webContents.send('win:maximized', win.isMaximized());
+  };
   win.on('maximize', sendMax);
   win.on('unmaximize', sendMax);
-  win.once('ready-to-show', () => win.show());
+  win.on('show', () => protectOwnWindow());
+  win.on('focus', () => protectOwnWindow());
+  win.on('minimize', (e) => {
+    e.preventDefault();
+    hideToTray();
+  });
+  win.on('close', (e) => {
+    if (isQuitting) return;
+    e.preventDefault();
+    hideToTray();
+  });
+  win.once('ready-to-show', () => {
+    protectOwnWindow();
+    win.show();
+  });
   win.loadURL(`http://127.0.0.1:${activePort}/`);
 }
 
@@ -188,16 +267,15 @@ function startServer(activePort) {
   server.on('exit', (code) => log('server exited', code));
 }
 
-ipcMain.on('win:minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize());
+ipcMain.on('win:minimize', () => hideToTray());
 ipcMain.on('win:maximize', (event) => {
   const w = BrowserWindow.fromWebContents(event.sender);
   if (!w) return;
   if (w.isMaximized()) w.unmaximize();
   else w.maximize();
 });
-ipcMain.on('win:close', (event) => BrowserWindow.fromWebContents(event.sender)?.close());
+ipcMain.on('win:close', () => hideToTray());
 
-// Matches electron-builder appId so taskbar / Start Menu use our icon identity.
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.watchtower.hiding');
 }
@@ -206,18 +284,14 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-  });
+  app.on('second-instance', () => showWindow());
 
   app.whenReady().then(async () => {
     try {
       port = await resolvePort();
       startServer(port);
       await waitForServer(port);
+      createTray();
       openWindow(port);
       updater = setupAutoUpdate();
     } catch (err) {
@@ -231,10 +305,13 @@ if (!gotLock) {
     }
   });
 
-  app.on('window-all-closed', () => {
+  app.on('before-quit', () => {
+    isQuitting = true;
     server?.kill();
-    app.quit();
   });
 
-  app.on('before-quit', () => server?.kill());
+  app.on('window-all-closed', (e) => {
+    // Stay alive in the tray unless the user chose Quit.
+    if (!isQuitting) e.preventDefault?.();
+  });
 }
