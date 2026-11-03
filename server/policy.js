@@ -203,19 +203,6 @@ export function activeTools({ suspects = [], windows = [] }, policy) {
   return [...found.values()].filter((t) => policy.tools[t.label] === 'guard' || policy.tools[t.label] === 'block');
 }
 
-/** Topmost visible non-confidential window — used so the taskbar looks “safe” in screenshots. */
-export function pickTaskbarDecoy(windows = [], status = new Map()) {
-  // monitor.ps1 lists Z-order top-first
-  for (const w of windows) {
-    if (!w?.hwnd || w.minimized || isSelfWindow(w)) continue;
-    if (w.toolWindow) continue;
-    const st = status.get(w.hwnd) || { confidential: false };
-    if (st.confidential) continue;
-    return { hwnd: w.hwnd, proc: w.proc, title: w.title };
-  }
-  return null;
-}
-
 export function evaluate({ windows, suspects, policy, overrides = {}, manual = false, pausedUntil = 0, now = Date.now(), skipCapture = new Set() }) {
   const status = new Map();
   for (const w of windows) status.set(w.hwnd, windowStatus(w, policy, overrides));
@@ -234,11 +221,5 @@ export function evaluate({ windows, suspects, policy, overrides = {}, manual = f
         return true;
       }).map((w) => ({ hwnd: w.hwnd, proc: w.proc, title: w.title, why: status.get(w.hwnd).why }))
     : [];
-  const hideFromTaskbar = shieldOn
-    ? windows
-      .filter((w) => status.get(w.hwnd)?.confidential && !isSelfWindow(w))
-      .map((w) => w.hwnd)
-    : [];
-  const taskbarDecoy = shieldOn ? pickTaskbarDecoy(windows, status) : null;
-  return { status, guards, blocks, paused, shieldOn, toShield, hideFromTaskbar, taskbarDecoy };
+  return { status, guards, blocks, paused, shieldOn, toShield };
 }

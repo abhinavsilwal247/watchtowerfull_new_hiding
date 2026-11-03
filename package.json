@@ -1,6 +1,6 @@
 {
   "name": "watchtower",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "private": true,
   "type": "module",
   "description": "Windows desktop app that keeps marked taskbar apps out of screenshots",
@@ -89,12 +89,6 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
           "target": "portable",
           "arch": [
             "x64"
@@ -106,20 +100,6 @@
       "signAndEditExecutable": true,
       "signExecutable": false,
       "verifyUpdateCodeSignature": false
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Watchtower",
-      "uninstallDisplayName": "Watchtower",
-      "packElevateHelper": false,
-      "differentialPackage": false,
-      "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true,
-      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"

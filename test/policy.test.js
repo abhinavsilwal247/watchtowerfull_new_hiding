@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultPolicy, sanitize, evaluate, windowStatus, buildDesk, sameApp, isConfidentialProc, pickTaskbarDecoy } from '../server/policy.js';
+import { defaultPolicy, sanitize, evaluate, windowStatus, buildDesk, sameApp, isConfidentialProc } from '../server/policy.js';
 import { classify } from '../server/signatures.js';
 
 const win = (o) => ({ hwnd: 1, title: '', pid: 10, proc: 'x', minimized: false, ...o });
@@ -83,19 +83,6 @@ test('pause, master switch and manual privacy mode', () => {
   assert.equal(evaluate({ windows, suspects: anydeskScan, policy: p, pausedUntil: now + 5000, now }).toShield.length, 0);
   assert.equal(evaluate({ windows, suspects: anydeskScan, policy: { ...p, enabled: false } }).toShield.length, 0);
   assert.equal(evaluate({ windows, suspects: [], policy: p, manual: true }).toShield.length, 1);
-});
-
-test('taskbar decoy is the topmost non-confidential window; confidential apps are listed for tab hide', () => {
-  const p = policyWith([{ proc: 'chrome', mode: 'always' }]);
-  const windows = [
-    win({ hwnd: 1, proc: 'chrome', title: 'Secret' }),
-    win({ hwnd: 2, proc: 'brave', title: 'News' }),
-    win({ hwnd: 3, proc: 'notepad', title: 'notes', minimized: true }),
-  ];
-  const ev = evaluate({ windows, suspects: [], policy: p });
-  assert.deepEqual(ev.hideFromTaskbar, [1]);
-  assert.equal(ev.taskbarDecoy?.hwnd, 2);
-  assert.equal(pickTaskbarDecoy(windows, ev.status)?.hwnd, 2);
 });
 
 test('already excluded windows are skipped; Watchtower itself is never shielded; topmost leftover is cleared', () => {
